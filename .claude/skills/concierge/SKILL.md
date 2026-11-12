@@ -1,71 +1,81 @@
+---
+name: concierge
+description: Procedures for hotel concierge work - booking-date check, guest vs provider inbox routing, duplicate-proof email search, tracker layout, and the flows for organising restaurants, tours, transfers and activities from the operator's vetted provider list. Use when a guest asks about dining, dietary needs, day trips, things to do, routes, transfers or local tips, when a provider replies about a guest booking, or when the operator asks to add a guest to the concierge tracker or check concierge status.
+---
+
 # Skill: Concierge Service
 
-## Trigger
+These procedures apply to every concierge task, whether the `concierge` sub-agent runs it or the main session does.
 
-Use proactively when:
+Three rules sit above everything here:
 
-- A guest asks about restaurants, tours, transfers, activities, or local recommendations
-- A guest mentions dining, dietary restrictions, or food preferences (this IS a concierge task — suggest restaurants)
-- A guest asks for driving routes, day-trip ideas, or things to do
-- A high-value booking is detected in the PMS (set your own threshold, e.g. above a given booking value)
-- An email arrives from or about a guest already on the concierge tracker
-- The operator asks to add a guest to the concierge tracker or organise a service
-- During morning routine, when guest emails mention any activity / dining / logistics need
+- **Draft, never send.** Every email to a guest or provider is a draft for the operator to approve.
+- **Vetted providers only.** Recommend only what is in `references/recommendations-template.md`. If nothing fits, tell the operator; never invent a place, a price or availability.
+- **PMS writes are append-only notes.** Anything else on a reservation needs the operator's approval.
 
-**IMPORTANT:** Any guest communication involving local recommendations (restaurants, activities, routes, sightseeing) MUST use this skill. Never draft restaurant or activity suggestions without consulting the vetted reference files first.
+## 1. Booking-date check (before any draft)
 
-## Booking-date sanity check (MANDATORY before drafting)
-
-Before drafting any concierge reply:
+A reply that ignores where the guest is in their stay reads as careless, so check first:
 
 1. Note the sent date of the guest's email.
-2. Pull the guest's booking (check-in / check-out) from the PMS.
-3. Compare with **today's date** and classify the stay phase:
-   - **Pre-arrival** (today < check-in): safe to send planning suggestions.
-   - **In-house** (check-in <= today < check-out): acknowledge they have already arrived. Only offer help for time they have left. Do NOT send generic pre-arrival "let us help plan your stay" content.
-   - **Post-stay** (today >= check-out): do NOT auto-draft. Flag to the operator — most likely you should apologise for the late reply and follow up only if useful.
-4. If the email sat for several days and the guest has since arrived or departed, **flag to the operator before drafting** with: email date, check-in/out, today's date, and proposed framing. Ask for approval before sending anything.
+2. Pull the guest's check-in and check-out from the PMS.
+3. Compare with today's date:
+   - **Pre-arrival** (today < check-in): planning suggestions are fine.
+   - **In-house** (check-in <= today < check-out): acknowledge that they have arrived and offer help only for the time they have left. No generic "let us help plan your stay" content.
+   - **Post-stay** (today >= check-out): do not draft. Flag it to the operator, who decides whether a late apology or follow-up is useful.
+4. If the email sat for several days and the guest has arrived or left since, flag it before drafting. Give the email date, the check-in and check-out dates, today's date and the framing you propose.
 
-## Email account routing (MANDATORY)
+## 2. Inbox routing
 
-When sending **to a guest**, always use a guest-facing inbox:
+| Recipient | Draft from |
+|---|---|
+| Hotel-room guest | `{{INBOX_GUEST_HOTEL}}` |
+| Whole-property renter | `{{INBOX_GUEST_RENTAL}}` |
+| Restaurant, driver, chef, tour operator, any vendor | `{{INBOX_PROVIDERS}}` |
 
-- `{{INBOX_GUEST_HOTEL}}` — for hotel-room guests
-- `{{INBOX_GUEST_RENTAL}}` — for whole-property renters
+Never draft a guest email from the provider inbox, or a provider email from a guest inbox. Guests then reply into a mailbox nobody watches for guest mail.
 
-**Never send guest-facing emails from your supplier inbox.** The supplier inbox (`{{INBOX_PROVIDERS}}`) is B2B only — restaurants, drivers, chefs, tour operators, vendors, accountants.
+If an older thread with a guest sits on the wrong account, do not continue it. Start a fresh email from the correct account: the routing rule beats thread continuity.
 
-If a previous thread with the guest happens to be on the wrong account (e.g. older pre-arrival emails sent from the supplier inbox), do NOT continue that thread. Start a fresh email from the correct account. Routing rule beats thread continuity.
+## 3. Duplicate-proof email search (before any guest draft)
 
-When emailing **service providers** on behalf of a guest, use `{{INBOX_PROVIDERS}}` — these are B2B conversations.
+Search every configured inbox two ways:
 
-## Whole-property concierge form (whole-property rentals only)
+- **By the email address on the reservation.** This finds threads even when the guest's display name differs.
+- **By the guest's full name.** This finds mail sent from a personal address that is not on the booking.
 
-If you accept whole-property bookings, host a single typed-fields intake form so renters submit all concierge preferences (arrival time, transfers, tours, dining, dietary, activities) upfront. It is **ONLY** for whole-property renters, never for individual hotel-room guests.
+If either search finds mail already sent to this guest on the same subject, do not draft a duplicate. Report what was sent and when, and whether it needs a follow-up.
 
-**When to send:**
+Then search for provider replies on the guest's open items.
 
-- Guest books the whole property (rental product, not individual rooms)
-- Include the form link in the pre-arrival / welcome email
-- If a whole-property renter emails you with concierge requests before completing the form, include the link so they can give you everything in one place
+## 4. Commands
 
-**How to identify a whole-property renter:**
+The operator supplies the command-line tools. The lines below show the shape this skill expects; the real flags depend on the operator's wrappers. If a command fails, run it with `--help` once and adapt. If the tool is missing, stop and report it.
 
-- Booking covers the entire property
-- Booking source / product code in the PMS marks it as a whole-property rental
-- Project memory tracks active whole-property bookings — check there
+```bash
+# PMS: find a reservation
+{{PMS_LOOKUP_TOOL}} --email "guest@example.com"
+{{PMS_LOOKUP_TOOL}} --name "LastName"
+{{PMS_LOOKUP_TOOL}} --booking-ref "<ota_ref>"
 
-**Never send this form to:**
+# PMS: append a note to a reservation
+{{PMS_NOTES_TOOL}} --reservation-id "<RES_ID>" --note "<text>"
 
-- Individual hotel-room guests
-- OTA bookings for individual rooms
-- Inquiries that have not yet converted to a whole-property booking
+# Email: read a thread, create a draft, create a threaded reply draft
+{{EMAIL_CLI}} thread-get --account guest --message-id "<MSG_ID>" --format text
+{{EMAIL_CLI}} create-draft --account guest --to "guest@example.com" --subject "<subject>" --body "<html>" --html
+{{EMAIL_CLI}} create-reply --account guest --message-id "<MSG_ID>" --body "<html>" --html
+```
 
-## Concierge Tracker
+Use `{{TRACKER_CLI}}` to read and update the tracker (ID `{{SHEET_ID_CONCIERGE}}`) and `{{CALENDAR_CLI}}` to read and write calendar events.
 
-Use a single source of truth for all concierge work. Reference setup is a Google Sheet (`SHEET_ID_CONCIERGE` in `.env`). Any tracker with two tabs (Guests + Services) works.
+Never use a send command, even if the email tool has one.
 
-### Guests tab
+## 5. Concierge tracker
+
+One tracker is the record of all concierge work. Any tool with two tabs works.
+
+**Guests tab**
 
 | Column | Description |
 |--------|-------------|
@@ -78,128 +88,84 @@ Use a single source of truth for all concierge work. Reference setup is a Google
 | Booking Source | Direct, OTA name, etc. |
 | Notes | Special requests, preferences, occasion |
 
-### Services tab
+**Services tab**
 
 | Column | Description |
 |--------|-------------|
-| Guest | Guest name (matches Guests tab) |
+| Guest | Guest last name (matches the Guests tab) |
 | Service Type | Restaurant, Tour, Transfer, Activity, Other |
 | Date | Date of the service |
-| Details | Specifics (restaurant name, tour route, pickup time, etc.) |
-| Status | Requested, Confirmed, Pending Deposit, Cancelled |
+| Details | Restaurant name, tour route, pickup time, etc. |
+| Status | Requested, Pending Deposit, Confirmed, Cancelled |
 | Cost | Cost if applicable |
-| Notes | Confirmation numbers, contact details, special instructions |
+| Notes | Confirmation numbers, provider contact, special instructions |
 
-## Service Types
+**Status values**
 
-- **Restaurant** -- Booking a table at a local restaurant
-- **Tour** -- Guided or self-guided tours and excursions
-- **Transfer** -- Airport pickup / drop-off, car service
-- **Activity** -- Spa, cooking class, wine tasting, water sports, etc.
-- **Other** -- Anything that does not fit the above
+- **Requested**: the guest has asked; not yet confirmed by the provider.
+- **Pending Deposit**: the provider needs a deposit or card guarantee before confirming. This always needs the operator.
+- **Confirmed**: the provider has confirmed in writing.
+- **Cancelled**: the service is cancelled.
 
-## Status Values
+## 6. Flows
 
-- **Requested** -- Guest has asked for this, not yet actioned
-- **Confirmed** -- Booked and confirmed with the provider
-- **Pending Deposit** -- Provider requires deposit before confirming
-- **Cancelled** -- Service cancelled
+### Recommending a restaurant, beach, tour or activity
 
-## Workflow — Check & Update Sequence
+1. Read the reference file, including "Do Not Recommend" and the call log.
+2. Match entries to the guest: dietary needs, occasion, style, party make-up (couple, family, children's ages), mobility, distance and season.
+3. Treat every caveat in the file as binding. For example, do not offer a club the file marks as hotel-guests-only.
+4. Offer two or three options at most, each with the reason it fits this guest, taken from the file's "Why we recommend" line.
+5. Offer to make the booking for them.
+6. If nothing fits, or the only fit was last verified long ago, report that instead of stretching a poor match.
 
-When checking concierge status or processing concierge work, ALWAYS follow this order:
+### Organising a service
 
-### Step 1: Load current state (sources of truth)
+1. Confirm the guest's details and dates from the PMS and the tracker.
+2. Pull the guest's name, mobile, party size and dates from the PMS. Never ask the guest for what the PMS already holds. Give the provider the guest's own mobile as the day-of contact, not the property landline, so the provider can reach them directly. If the PMS has no mobile, say so in the report.
+3. Draft the request to the provider from `{{INBOX_PROVIDERS}}`. Pass on dietary needs and party make-up.
+4. Add the service to the Services tab with status "Requested".
+5. When the provider replies, update the status and draft the confirmation to the guest.
 
-1. **Project memory** (`.claude/agent-memory/concierge/`) — read the list of active guests and open items
-2. **PMS reservations** — for each active guest, look up the reservation and read the notes (`{{PMS_LOOKUP_TOOL}}`). The notes contain the day-by-day concierge plan with statuses.
-3. **Concierge tracker** (Services tab) — read current service statuses
+### Adding a guest to the tracker
 
-### Step 2: Check for existing threads and updates
+1. The trigger is a whole-property booking, a booking above the operator's value threshold, or the operator asking.
+2. Add the guest to the Guests tab.
+3. Draft a welcome email offering concierge help, from the correct guest inbox, after the booking-date check and the duplicate search.
 
-4. **Calendar** — check upcoming concierge events for any that need attention
-5. **Emails — duplicate-proof search** — before drafting ANY email to a guest, search all configured inboxes using BOTH methods:
-   - **Method A (PMS email):** Look up the guest's reservation in the PMS, get the email address on file, and search all inboxes for that email address. This catches threads even if the guest's display name differs.
-   - **Method B (Full name):** Search all inboxes for the guest's full name. This catches emails sent from a personal address not linked to the booking.
-   - If EITHER search returns existing sent messages or threads with this guest, **do not draft a duplicate**. Instead, note what was already sent and flag any that need a follow-up.
-6. **Provider emails** — search for replies from restaurants, tour operators, transfer providers related to open items.
+### Monitoring open items
 
-### Step 3: Act on what's changed
+- Compare incoming email with tracker statuses to find what changed.
+- List any service whose date is within a few days and whose status is still "Requested" or "Pending Deposit".
+- List provider requests that have had no reply, with the date they were sent.
 
-7. **Draft replies** — for any emails that need a response, draft them for the operator to review
-8. **Update all systems** — after every action, update PMS notes, tracker, calendar, and memory (see Rules below)
+### Whole-property concierge form
 
-### Adding a New Guest
+Whole-property renters get one intake form for all their requests (arrival time, transfers, tours, dining, dietary needs, activities): `{{CONCIERGE_FORM_URL}}`.
 
-1. Identify a high-value or whole-property booking in the PMS or from email
-2. Add to the Guests tab with all details
-3. Draft a warm, personal welcome email offering concierge services
-4. Show the draft to the operator for approval
+- Include the link in the pre-arrival or welcome draft for a whole-property booking.
+- If a renter emails requests before completing the form, answer what they asked and include the link.
+- Never send it to hotel-room guests, to OTA bookings for single rooms, or to an inquiry that has not yet become a whole-property booking.
+- A booking is whole-property when it covers the entire property or the PMS booking source or product marks it as a rental.
 
-### Organising a Service
+## 7. Guest preferences to PMS note
 
-1. Confirm guest details and dates from the PMS + tracker
-2. Contact the service provider (draft email for the operator to review)
-3. Add the service to the Services tab with status "Requested"
-4. Update all systems as confirmations come in
-5. Inform the guest of confirmations (draft for the operator's review)
+When a guest mentions anything that staff on the day would want to know (bedding, cot or extra bed, dietary needs or allergies, mobility needs, arrival time, transfer needs, an occasion, children and their ages, pets), add it as a note on the reservation, even if no other concierge action follows.
 
-## Local Recommendations — Reference Files
+1. Find the reservation with `{{PMS_LOOKUP_TOOL}}`.
+2. If the notes tool supports `--dry-run`, run it that way first and check the reservation ID and text.
+3. Append the note in this form: `<Type> request (<source> <YYYY-MM-DD>): <detail>.`
 
-**CRITICAL: Always consult your reference file(s) before recommending anything to a guest. Never invent or guess recommendations.**
+This needs no approval because it only adds information and changes nothing about the booking. It applies to notes only.
 
-| File | Contents |
-|------|----------|
-| `references/recommendations-template.md` | Vetted list of restaurants, beaches, chefs, drivers, and other providers — fill in your own |
+## 8. After every action, update all four
 
-**Restaurant workflow:**
+1. **Tracker**: status and notes columns.
+2. **Calendar**: one event per service, with the guest name, phone, stay dates, booking reference, service details, provider contact, cost and status in the description.
+3. **PMS reservation notes**: the day-by-day concierge plan with the status of each service.
+4. **Memory**: the guest's open items.
 
-1. Read your vetted-restaurants file
-2. Match restaurants to the guest's needs (dietary restrictions, occasion, style, proximity)
-3. Only recommend restaurants from the approved list
-4. If no suitable restaurant exists in the list, **tell the operator** rather than inventing one
-5. Offer to make the reservation on the guest's behalf — never tell the guest to call themselves
+A system you could not update goes in the report, so the operator knows which record is stale.
 
-**Beach / activity workflow:**
+## 9. Keeping the reference file current
 
-1. Read your vetted-beaches / vetted-activities file
-2. Match to the guest profile — couples vs family, mobility, interests — and read any access caveats (e.g. hotel-guest-only clubs)
-3. Only recommend places from the approved list; never invent
-4. Offer to call ahead and reserve on the guest's behalf
-5. After any new call / visit feedback from the operator, append to the call-log section of the file
-
-**Building the reference files:**
-
-- When the operator adds a new restaurant or activity recommendation, update the relevant reference file
-- Include: name, location, style, why you recommend it, any caveats (dietary, price, booking needed)
-- Track a "Do Not Recommend" section for places you've ruled out
-
-## Guest preferences -> PMS note (ALWAYS)
-
-Whenever a guest mentions any stay-relevant preference or detail in an email — bedding setup (king vs twin, single bed, cot, extra bed), dietary needs / allergies, mobility needs, arrival time, transfer requirements, occasion (anniversary, birthday), kids / ages, pet info, anything an operator on the day would want to know — **immediately add it as a note to the PMS reservation** so it shows up at check-in. Do this even if no other concierge action is required.
-
-```bash
-# 1. Resolve the reservation (OTA confirmation # is in the body)
-{{PMS_LOOKUP_TOOL}} --booking-ref <ota_ref>
-# 2. Append note (no approval needed for notes — append-only, no risk)
-{{PMS_NOTES_TOOL}} --reservation-id <RES_ID> \
-  --note "{Type} request ({source} {YYYY-MM-DD}): {detail}." --dry-run
-# then re-run without --dry-run
-```
-
-Look up the reservation first via `{{PMS_LOOKUP_TOOL}} --booking-ref <ota_ref>` or `--name`. Don't ask the operator for approval to add a note — it's append-only metadata, no risk. (Modifying reservation dates / rooms / charges still requires approval per the main rules.)
-
-## Rules
-
-- **Always check the PMS** for booking details before quoting or organising anything.
-- **Pull guest contact details (phone, email, party size, dates) from the PMS before drafting** any email — to a guest, a restaurant, a tour operator, a transfer, anyone. The data is already in the PMS.
-  - Never ask the guest for info we already have in the PMS (phone, dates, party size). It looks unprofessional.
-  - Never substitute the property landline as the contact when booking restaurants / tours on a guest's behalf — use the guest's mobile from the PMS so the provider can reach them directly.
-- **Always draft emails for the operator to review** before sending to guests or service providers.
-- **Never modify PMS reservations** without the operator's explicit approval.
-- **Log services in the tracker** as soon as they are requested; update status as it changes.
-- **After EVERY concierge action** (email sent, response received, status change, booking confirmed), immediately update ALL of:
-  1. **Concierge tracker** — status and notes columns
-  2. **Project memory** (`.claude/agent-memory/concierge/`)
-  3. **Calendar** — create / update events with full details in description: guest name, email, phone, check-in / check-out dates, booking ref, room details, service details, provider contact, cost, status
-  4. **PMS reservation notes** — add / update a day-by-day concierge plan on the reservation via `{{PMS_NOTES_TOOL}}`, with status of each service (CONFIRMED, REQUESTED, etc.)
+The operator owns the reference file. When the operator gives you a new provider, a visit report or a ruling ("stop recommending X"), update the file: name, location, style, why it is recommended, caveats, contact and a dated call-log line. Move ruled-out places to "Do Not Recommend" with the reason and date. Do not add a provider on your own initiative.
