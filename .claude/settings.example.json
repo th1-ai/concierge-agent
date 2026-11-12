@@ -1,0 +1,45 @@
+{
+  "permissions": {
+    "allow": [
+      "Read",
+      "Grep",
+      "Glob",
+      "Edit(/runs/**)",
+      "Edit(/.claude/agent-memory/concierge/**)",
+      "Bash({{PMS_LOOKUP_TOOL}} *)",
+      "Bash({{PMS_NOTES_TOOL}} *)",
+      "Bash({{EMAIL_CLI}} *)",
+      "Bash({{TRACKER_CLI}} *)",
+      "Bash({{CALENDAR_CLI}} *)"
+    ],
+    "deny": [
+      "Read(./.env)",
+      "Read(./.env.*)",
+      "Edit(/AUTONOMY.md)",
+      "Edit(/.claude/settings.local.json)",
+      "Edit(/.claude/settings.json)",
+      "Edit(/.claude/hooks/**)",
+      "Bash(rm *)",
+      "Bash(sudo *)",
+      "Bash(curl *)",
+      "Bash(wget *)",
+      "Bash(git push *)",
+      "WebFetch",
+      "WebSearch"
+    ]
+  },
+  "hooks": {
+    "PreToolUse": [
+      {
+        "matcher": "Bash",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python3 \"$CLAUDE_PROJECT_DIR/.claude/hooks/autonomy-guard.py\"",
+            "timeout": 10
+          }
+        ]
+      }
+    ]
+  }
+}

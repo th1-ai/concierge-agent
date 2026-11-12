@@ -26,3 +26,8 @@ Thumbs.db
 dist/
 build/
 *.log
+
+# Agent run log, handoff files and reports (they hold guest data)
+runs/*
+!runs/.gitkeep
+!runs/README.md
